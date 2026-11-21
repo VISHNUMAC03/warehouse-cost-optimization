@@ -1,0 +1,21 @@
+# Run with:  dbt run --project-dir dbt --profiles-dir dbt   (from the project root)
+#
+# Always connects as the ClickHouse user `dbt` (not CLICKHOUSE_USER, which the
+# app containers set per service), so system.query_log.user attributes every
+# transform query to dbt. log_comment carries the run tag that
+# costlab.dbt_runner uses to sum up what a single run read and wrote.
+warehouse_costs:
+  target: dev
+  outputs:
+    dev:
+      type: clickhouse
+      driver: http
+      host: "{{ env_var('CLICKHOUSE_HOST', 'localhost') }}"
+      port: "{{ env_var('CLICKHOUSE_HTTP_PORT', '8123') | as_number }}"
+      user: "{{ env_var('DBT_CLICKHOUSE_USER', 'dbt') }}"
+      password: "{{ env_var('CLICKHOUSE_PASSWORD', 'changeme') }}"
+      schema: analytics
+      threads: 4
+      send_receive_timeout: 900
+      custom_settings:
+        log_comment: "{{ env_var('DBT_RUN_TAG', 'dbt-manual') }}"

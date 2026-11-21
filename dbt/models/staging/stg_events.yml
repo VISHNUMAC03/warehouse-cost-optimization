@@ -1,0 +1,14 @@
+version: 2
+
+models:
+  - name: stg_events
+    description: raw.events with a date column, split category levels and 'unknown' for missing brand/category.
+    columns:
+      - name: event_date
+      - name: event_type
+      - name: category_l1
+        description: First segment of category_code ('unknown' if empty).
+      - name: category_l2
+        description: Second segment of category_code ('unknown' if missing).
+      - name: brand
+        description: Brand, 'unknown' if empty.

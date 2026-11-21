@@ -1,0 +1,30 @@
+version: 2
+
+sources:
+  - name: raw
+    schema: raw
+    description: Landing zone. Written by ingest/backfill.py (history) and ingest/consumer.py (Kafka stream).
+    loaded_at_field: _loaded_at
+    freshness:
+      warn_after: {count: 15, period: minute}
+    tables:
+      - name: events
+        description: >
+          One row per storefront event, as it arrived. Sorted by _loaded_at so
+          incremental models can read "everything since last run" cheaply.
+          Exact duplicate rows exist in the source data and are kept.
+        columns:
+          - name: event_time
+            tests: [not_null]
+          - name: event_type
+            tests:
+              - accepted_values:
+                  arguments:
+                    values: ['view', 'cart', 'remove_from_cart', 'purchase']
+          - name: _source
+            tests:
+              - accepted_values:
+                  arguments:
+                    values: ['backfill', 'stream']
+          - name: _loaded_at
+            tests: [not_null]

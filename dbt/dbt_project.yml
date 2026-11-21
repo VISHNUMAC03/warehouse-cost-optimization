@@ -1,0 +1,21 @@
+name: warehouse_costs
+version: "1.0.0"
+config-version: 2
+profile: warehouse_costs
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+test-paths: ["tests"]
+clean-targets: ["target", "logs"]
+
+flags:
+  send_anonymous_usage_stats: false
+
+models:
+  warehouse_costs:
+    staging:
+      +materialized: view
+    marts:
+      # Every mart is incremental: each run only touches what arrived since that
+      # model's own watermark (see macros/loaded_after_watermark.sql).
+      +materialized: incremental

@@ -1,0 +1,82 @@
+version: 2
+
+models:
+  - name: fct_events
+    description: >
+      Every event, partitioned by month and ordered by (event_date, event_type, category_l1, brand).
+      Filter on event_date (and event_type where it makes sense) to read only the granules you need.
+    columns:
+      - name: event_time
+        tests: [not_null]
+      - name: event_date
+        tests: [not_null]
+      - name: event_type
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['view', 'cart', 'remove_from_cart', 'purchase']
+      - name: category_l1
+        tests: [not_null]
+      - name: brand
+        tests: [not_null]
+      - name: revenue
+        description: price for purchases, 0 for every other event type.
+      - name: _loaded_at
+        description: When the row landed in raw.events. Also this model's incremental watermark.
+        tests: [not_null]
+
+  - name: fct_sessions
+    description: One row per non-empty user_session, recomputed whenever the session gets new events.
+    columns:
+      - name: user_session
+        tests: [not_null, unique]
+      - name: session_date
+        tests: [not_null]
+      - name: events
+        tests: [not_null]
+      - name: converted
+        description: 1 if the session has at least one purchase.
+        tests:
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+                quote: false
+      - name: entry_category_l1
+        description: category_l1 of the session's first event.
+      - name: max_loaded_at
+        description: Newest _loaded_at among the session's events. max() over the table is the watermark.
+
+  - name: dim_products
+    description: >
+      Latest attributes per product. ReplacingMergeTree(last_seen_at) ORDER BY product_id,
+      so a product can briefly have more than one row after an incremental run:
+      query it with FINAL (`select ... from analytics.dim_products final`).
+    columns:
+      - name: product_id
+        tests: [not_null]
+      - name: first_seen_at
+        tests: [not_null]
+      - name: last_seen_at
+        tests: [not_null]
+      - name: last_price
+        description: Price on the product's most recent event.
+
+  - name: agg_daily_category
+    description: Daily totals per (event_date, category_l1, brand). One partition per day.
+    columns:
+      - name: event_date
+        tests: [not_null]
+      - name: buyers
+        description: Distinct user_id with a purchase.
+      - name: sessions
+        description: Distinct non-empty user_session.
+
+  - name: agg_hourly_funnel
+    description: Hourly funnel per (event_hour, category_l1). One partition per day.
+    columns:
+      - name: event_hour
+        tests: [not_null]
+      - name: viewers
+        description: Distinct user_id with a view.
+      - name: buyers
+        description: Distinct user_id with a purchase.
