@@ -1,0 +1,88 @@
+# The daily workload `costlab simulate` bills. Everything modeled lives here;
+# everything measured (query durations, bytes scanned, dbt run times) comes from
+# ClickHouse system.query_log via the bench tables. Change a number, re-run
+# `python -m costlab simulate`, and the report follows.
+
+pricing:
+  # Snowflake on-demand price per credit. $2 Standard / $3 Enterprise / $4 Business
+  # Critical on AWS us-east-1 at the time of writing; Enterprise is the common case.
+  usd_per_credit: 3.0
+  # Snowflake bills per second but with a 60s minimum each time a warehouse resumes.
+  min_billed_seconds: 60
+  # Credits/hour per size are Snowflake's fixed table (XS=1 S=2 M=4 L=8 XL=16), see billing.py.
+
+  # Second view of the same day: pay per byte scanned instead of per second
+  # (BigQuery on-demand list price). Levers 2 and 3 cut bytes, so this is where
+  # they show up in dollars. Covers reporting + transform; the live dashboard's
+  # bytes aren't modeled, so it's left out of this number.
+  usd_per_tib_scanned: 6.25
+
+# Laptop ClickHouse answers these queries far faster than a cloud warehouse would.
+# This multiplies every measured query / dbt duration before billing. Left at 1.0 on
+# purpose: the report uses the measured times as they are. Raise it to see how the
+# levers behave when queries take longer.
+duration_scale: 1.0
+
+warehouses:
+  reporting:            # BI dashboards + analysts' ad-hoc queries
+    size: S
+  transform:            # dbt
+    size: S
+  live:                 # the 10s-refresh live dashboard over raw events.
+    size: XS            # Same in every step: an always-on warehouse that no lever touches.
+    always_on: true     # It puts a floor under the bill, which is what happens in real life too.
+
+# The three BI dashboards. Their panel SQL is read from grafana/dashboards/<uid>.json
+# by bench-scan; simulate uses the measured result for each panel.
+bi_dashboards:
+  - sales-overview
+  - conversion-funnel
+  - product-performance
+
+# Refresh schedules a dashboard can be on. Every refresh runs all of the
+# dashboard's panels at once (that's what a BI tool's scheduled refresh does).
+schedules:
+  every_15_min:         # the "before": refresh every 15 min, 24/7, whether anyone looks or not
+    every_minutes: 15
+    start: "00:00"
+    end: "24:00"
+  twice_a_day:          # the "after": refreshed before the morning stand-up and after lunch,
+    at: ["08:00", "13:00"]   # which covers how often people actually opened them
+
+# Analysts' ad-hoc queries on the reporting warehouse. Same in every step (fixed
+# seed): start times are spread uniformly over working hours and each query is a
+# random pick from the measured BI panel queries, so it scans what those scan.
+analyst_queries:
+  per_day: 40
+  working_hours: ["09:00", "18:00"]
+  seed: 42
+
+# dbt: one `dbt run` per hour at :05 on the transform warehouse, with the measured
+# duration and bytes of a full-refresh or incremental run (bench-dbt).
+dbt:
+  every_minutes: 60
+  offset_minutes: 5
+
+# Scenario steps, applied cumulatively in the order of the post.
+# `baseline` sets every knob; each later step only lists what it changes.
+baseline:
+  name: baseline
+  change: "15 min dashboard refresh 24/7, unpartitioned fact table, hourly dbt full refresh, auto_suspend 10 min"
+  dashboard_schedule: every_15_min
+  layout: unpartitioned          # bench-scan layout for analytics.fct_events
+  dbt_mode: full-refresh
+  auto_suspend_seconds: 600      # 10 min - Snowflake's default when created from the UI
+
+steps:
+  - name: dashboard schedule
+    change: "BI dashboards refresh twice a day instead of every 15 min"
+    dashboard_schedule: twice_a_day
+  - name: partition + cluster
+    change: "fct_events partitioned by month, ordered by (event_date, event_type, category_l1, brand)"
+    layout: partitioned
+  - name: incremental dbt
+    change: "hourly dbt run is incremental instead of a full rebuild"
+    dbt_mode: incremental
+  - name: auto-suspend 60s
+    change: "auto_suspend lowered from 600s to 60s on reporting and transform"
+    auto_suspend_seconds: 60
