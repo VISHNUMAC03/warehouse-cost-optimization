@@ -1,0 +1,8 @@
+confluent-kafka==2.16.2
+clickhouse-connect==1.13.0
+dbt-core==1.12.7
+dbt-clickhouse==1.10.3
+python-dotenv==1.2.4
+PyYAML==6.0.3
+kaggle==1.7.4.5
+pytest==9.2.0

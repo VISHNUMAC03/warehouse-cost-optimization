@@ -1,0 +1,10 @@
+<!-- query_log is the "billing export" for this project: every cost number comes from it. -->
+<clickhouse>
+    <query_log>
+        <database>system</database>
+        <table>query_log</table>
+        <partition_by>toYYYYMM(event_date)</partition_by>
+        <ttl>event_date + INTERVAL 30 DAY DELETE</ttl>
+        <flush_interval_milliseconds>2000</flush_interval_milliseconds>
+    </query_log>
+</clickhouse>

@@ -1,0 +1,5 @@
+<!-- Laptop-sized limits. Docker Desktop's VM often has ~8 GB total and Kafka + Grafana
+     live there too, so don't let ClickHouse take 90% of it (its default). -->
+<clickhouse>
+    <max_server_memory_usage>4500000000</max_server_memory_usage>
+</clickhouse>
